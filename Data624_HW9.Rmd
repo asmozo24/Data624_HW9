@@ -1,0 +1,312 @@
+---
+title: "Data624_HW9"
+author: "Alexis Mekueko"
+date: "11/30/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+```{r load-packages, results='hide',warning=FALSE, message=FALSE, echo=FALSE}
+
+##library(tidyverse) #loading all library needed for this assignment
+
+
+library(knitr)
+library(dplyr)
+library(tidyr)
+
+library(reshape)
+
+library(stats)
+library(statsr)
+library(GGally)
+library(pdftools)
+library(correlation)
+
+library(lubridate)
+library(fpp3)
+library(urca)
+library(naniar)
+library(xts)
+library(tsibble)
+library(tseries)
+library(tsibbledata)
+library(forecast)
+library(caret)
+library(openxlsx)
+#Sys.setenv(R_ZIPCMD = "C:/Program Files/R/rtools40/bin/zip")
+library(readxl)
+#library(xlsx)
+library(zoo)
+set.seed(34332)
+#below is tool install rtools (we did successful)
+#writeLines('PATH="${RTOOLS40_HOME}\\usr\\bin;${PATH}"', con = "~/.Renviron")
+#install.packages("jsonlite", type = "source")
+#Sys.which("make")
+
+library(CORElearn)
+library(MASS)
+library(plyr)
+library(reshape2)
+library(lattice)
+library(ellipse)
+
+```
+
+
+[Github Link](https://github.com/asmozo24/Data624_HW9)
+<br>
+[Web Link](https://rpubs.com/amekueko/841685)
+
+Chapter 8: Regression Trees and Rule-Based Models
+
+Do problems 8.1, 8.2, 8.3, and 8.7 in Kuhn and Johnson.  Please submit the Rpubs link along with the .rmd file.
+
+
+Exercises
+
+8.1. Recreate the simulated data from Exercise 7.2:
+
+```{r }
+library(mlbench)
+set.seed(200)
+simulated <- mlbench.friedman1(200, sd = 1)
+
+simulated <- cbind(simulated$x, simulated$y)
+
+simulated <- as.data.frame(simulated)
+
+colnames(simulated)[ncol(simulated)] <- "y"
+
+
+```
+a) Fit a random forest model to all of the predictors, then estimate the variable importance scores:
+
+```{r }
+
+library(randomForest)
+library(caret)
+
+model1 <- randomForest(y ~ ., data = simulated,
+                       importance = TRUE,
+                       ntree = 1000)
+
+rfImp1 <- varImp(model1, scale = FALSE)
+rfImp1
+
+```
+
+Did the random forest model significantly use the uninformative predictors (V6 – V10)? No, the random forest modest significant predictors are V1, V2, V4.
+
+(b) Now add an additional predictor that is highly correlated with one of the informative predictors. For example:
+
+```{r }
+simulated$duplicate1 <- simulated$V1 + rnorm(200) * .1
+cor(simulated$duplicate1, simulated$V1)
+```
+
+Fit another random forest model to these data. 
+```{r }
+model2 <- randomForest(y ~ ., data = simulated,
+                       importance = TRUE,
+                       ntree = 1000)
+
+rfImp2 <- varImp(model2, scale = FALSE)
+rfImp2
+
+```
+
+Did the importance score for V1 change? Yes, the importance score for V1 change. What happens when you add another predictor that is also highly correlated with V1? The addition of another predictor highly correlated with V1 had influence in the random forest model. V1 is no longer the most significant predictor. with the addition of predictor, duplicated1 , we see V4 is now the most significant predictor in the random forest model.
+
+Use the cforest function in the party package to fit a random forest model using conditional inference trees. The party package function varimp can calculate predictor importance. The conditional argument of that function toggles between the traditional importance measure and the modified version described in Stroblet al. (2007). 
+
+```{r }
+
+library(party)
+ model3 <- cforest(y~ ., data = simulated)
+rfImp3 <- varImp(model3, conditional = TRUE)
+rfImp3
+
+```
+
+Do these importances show the same pattern as the traditional random forest model? Yes, it is about the same with exception that the most significant predictor is V4 instead of V1. V6-V10 still falling at the bottom.
+
+(d) Repeat this process with different tree models, such as boosted trees and Cubist. Does the same pattern occur?
+
+Cubist Model
+```{r }
+
+library(Cubist)
+model4 <- cubist(x = simulated[, -(ncol(simulated)-1)],  y = simulated$y, committees = 100)
+rfImp4 <- varImp(model4, conditional = TRUE)
+rfImp4
+summary(model4)
+
+```
+
+
+Boosted Trees Model
+```{r }
+library(gbm)
+gbmModel <- gbm(y ~ ., data = simulated, distribution = "gaussian")
+summary.gbm(gbmModel)
+
+```
+
+We cannot say the pattern occur strictly as previously observed. This time, Boosted trees model show V4, V2, V1 as the 03 most significant predictors. Cubist model shows V2, V1, V4 are the 03 most significant predictors. 
+
+
+8.2 Use a simulation to show tree bias with different granularities.
+
+```{r }
+
+var1 <- rnorm(1000, 1,100)
+var2 <- rnorm(1000, 2,50)
+var3 <- rnorm(1000,1,5)
+y <- var1+var2+var3 
+df <- data.frame(var3, var2, var1, y)
+model5 <- randomForest(y ~., data = df, importance = TRUE, ntree = 100)
+rfImp5 <- varImp(model5, conditional = FALSE)
+rfImp5
+
+
+```
+
+
+We see that var1 shows the highest significance in this random forest model probably due to the higher standard deviation on V1.
+
+8.3. In stochastic gradient boosting the bagging fraction and learning rate will govern the construction of the trees as they are guided by the gradient. Although the optimal values of these parameters should be obtained through the tuning process, it is helpful to understand how the magnitudes of these parameters affect magnitudes of variable importance. Figure 8.24 provides the variable importance plots for boosting using two extreme values for the bagging fraction (0.1 and 0.9) and the learning rate (0.1 and 0.9) for the solubility data. The left-hand plot has both parameters set to 0.1, and the right-hand plot has both set to 0.9:
+
+(a) Why does the model on the right focus its importance on just the first few of predictors, whereas the model on the left spreads importance across more predictors? Having the bagging fraction and learning rate parameters set to 0.9 has the influence on the highest significant predictors whereas on the left the set 0.1 make the influence loose. therefore, we get more random variable on the left figure showing their significance level in the model. 
+
+(b) Which model do you think would be more predictive of other samples?
+I think it would depend on what we are looking for in the model. If we are interested to see the top learning rate, then model on the right. If we are interested in looking for learning curve across predictors, then the model on the left will be appropriate.
+
+(c) How would increasing interaction depth affect the slope of predictor importance for either model in Fig. 8.24?
+For both model, increasing interaction depth will reduce the slope of predictor importance.
+
+
+8.7. Refer to Exercises 6.3 and 7.5 which describe a chemical manufacturing process. Use the same data imputation, data splitting, and pre-processing steps as before and train several tree-based models:
+(a) Which tree-based regression model gives the optimal resampling and test set performance?
+
+```{r }
+
+
+library(AppliedPredictiveModeling)
+library(RANN)
+data(ChemicalManufacturingProcess)
+df <- ChemicalManufacturingProcess
+#sum(is.na(df))
+trans <- preProcess(df,"knnImpute")
+#sum(is.na(trans))
+pred <- predict(trans, df)
+pred <- pred %>% select_at(vars(-one_of(nearZeroVar(., names = TRUE))))
+
+trainDf <- createDataPartition(pred$Yield, p=0.8, time = 1, list = FALSE)
+trainX <-pred[trainDf, ]
+trainY <- pred$Yield[trainDf]
+testX <- pred[-trainDf,]
+testY <- pred$Yield[-trainDf]
+#postResample(pred = predict(plsTune, newdata=testX), obs = testY)
+
+```
+
+
+Random Forest Model
+```{r }
+
+model1 <- train(x = trainX, 
+                y = trainY,
+                method = 'rf',
+                tuneLength = 10)
+model1
+
+```
+
+
+Cubist Model
+```{r }
+model2 <- train(x = trainX,
+                y = trainY,
+                method = 'cubist')
+model2
+
+```
+
+
+Boosted Trees Model
+```{r }
+gbmGrid <- expand.grid(.interaction.depth = seq(1, 7, by = 2),
+                       .n.trees = seq(100, 1000, by = 50),
+                       .shrinkage = c(0.01, 0.1, 0.5),
+                       .n.minobsinnode=c(5,10,15))
+
+set.seed(100)
+
+model3 <- train(x = trainX,
+                y = trainY,
+                method = "gbm",
+                tuneGrid = gbmGrid,
+
+ ## The gbm() function produces copious amounts
+
+ ## of output, so pass in the verbose option
+
+ ## to avoid printing a lot to the screen.
+
+verbose = FALSE)
+
+model3
+
+```
+
+Looking at the 03 regression models to find which gives the optimal resampling and test set performance. 
+```{r }
+postResample(pred = predict(model1, newdata=testX), obs = testY)
+postResample(pred = predict(model2, newdata=testX), obs = testY)
+postResample(pred = predict(model3, newdata=testX), obs = testY)
+
+```
+
+Model 2, Cubist model gives the optimal resampling and test set performance based on RMSE = 1.795094e-08,   Rsquared = 1.000000e+00,  MAE = 1.315217e-08 
+
+
+(b) Which predictors are most important in the optimal tree-based regression model? Do either the biological or process variables dominate the list? How do the top 10 important predictors compare to the top 10 predictors from the optimal linear and nonlinear models?
+```{r }
+
+rfImpX <- varImp(model1, conditional = FALSE)
+rfImpX
+#summary(rfImpX)
+
+```
+
+Yield	100.00000000			
+ManufacturingProcess13	0.36769544			
+ManufacturingProcess18	0.23847121			
+BiologicalMaterial01	0.15930322			
+BiologicalMaterial03	0.15324485			
+BiologicalMaterial02	0.13415505			
+ManufacturingProcess17	0.10606837			
+BiologicalMaterial05	0.07847052			
+ManufacturingProcess32	0.07815230			
+ManufacturingProcess25	0.07263430	
+
+Neither the ManufacturingProcess or the biological variables dominate the first top 10 of the list. somehow I get a weird result with the optimal model2. 
+
+(c) Plot the optimal single tree with the distribution of yield in the terminal nodes. Does this view of the data provide additional knowledge about the biological or process predictors and their relationship with yield?
+```{r }
+library(rpart.plot)
+library(partykit)
+treeplot <- as.party(rpart(Yield ~., data = trainX ))
+plot(treeplot)
+
+```
+
+
+
+
